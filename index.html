@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis Cuentas</title>
+<meta name="description" content="Control de sueldo, gastos y deudas. Los datos quedan en tu teléfono.">
+<meta name="theme-color" content="#123d33">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root {
+  --bg: #f3f5f2; --card: #ffffff; --ink: #18211e; --muted: #5d6b66; --line: #dde3df;
+  --brand: #1b6b55; --brand-ink: #ffffff; --brand-soft: #e2f1eb;
+  --good: #1b7f4b; --bad: #b3361f; --warn: #9a6400; --bar: #123d33;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1513; --card: #18201d; --ink: #e6ece9; --muted: #95a39d; --line: #2a3531;
+    --brand: #3fae8a; --brand-ink: #06120e; --brand-soft: #1d3029;
+    --good: #5bcf8f; --bad: #ff8a73; --warn: #e6b450; --bar: #0b100e;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+header { background: var(--bar); color: #fff; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 18px; margin: 0; flex: 1; }
+header input[type=month] { background: transparent; color: #fff; border: 1px solid #ffffff55; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; color-scheme: dark; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+section.tab { display: none; } section.tab.on { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.row:last-child { border-bottom: 0; }
+.row .n { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.muted { color: var(--muted); font-size: 14px; }
+.good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid2 .card { margin: 0; }
+.mid { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+button, .btn { font: inherit; border: 0; border-radius: 10px; padding: 11px 16px; background: var(--brand); color: var(--brand-ink); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+button.sec, .btn.sec { background: var(--brand-soft); color: var(--ink); }
+button.link { background: none; color: var(--brand); padding: 6px 4px; }
+button.danger { background: none; color: var(--bad); padding: 6px 4px; }
+button:disabled { opacity: .5; }
+.acciones { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+.acciones > * { flex: 1 1 140px; }
+input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; }
+input.num { text-align: right; font-variant-numeric: tabular-nums; }
+label.f { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+.edit { display: grid; grid-template-columns: 1fr 120px 34px; gap: 6px; margin-bottom: 6px; align-items: center; }
+.edit button { padding: 6px; background: none; color: var(--bad); font-size: 18px; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; background: var(--brand); }
+.chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--ink); margin-left: 6px; vertical-align: middle; }
+nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+nav button { flex: 1; background: none; color: var(--muted); border-radius: 0; padding: 10px 4px 12px; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 600; }
+nav button svg { width: 22px; height: 22px; }
+nav button.on { color: var(--brand); }
+dialog { border: 0; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 40px); background: var(--card); color: var(--ink); }
+dialog::backdrop { background: #0008; }
+dialog .in { padding: 16px; overflow: auto; max-height: calc(100vh - 40px); }
+dialog h3 { margin: 0 0 8px; }
+.check { padding: 10px 12px; border-radius: 10px; margin: 10px 0; font-weight: 600; }
+.check.ok { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.check.no { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.prog { margin: 12px 0; }
+details summary { cursor: pointer; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+.vacio { text-align: center; color: var(--muted); padding: 24px 8px; }
+.toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; max-width: calc(100vw - 32px); }
+.toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mis Cuentas</h1>
+  <input type="month" id="mes" aria-label="Mes">
+</header>
+
+<main>
+  <!-- RESUMEN -->
+  <section class="tab on" id="t-resumen"></section>
+
+  <!-- RECIBOS -->
+  <section class="tab" id="t-recibos">
+    <div class="acciones">
+      <label class="btn">📄 Cargar PDF<input type="file" id="f-pdf" accept="application/pdf" hidden></label>
+      <label class="btn sec">📷 Foto del recibo<input type="file" id="f-foto" accept="image/*" capture="environment" hidden></label>
+    </div>
+    <div id="lista-recibos"></div>
+  </section>
+
+  <!-- DEUDAS -->
+  <section class="tab" id="t-deudas">
+    <div class="acciones"><button id="nueva-deuda">＋ Nueva deuda</button></div>
+    <div id="lista-deudas"></div>
+  </section>
+
+  <!-- GASTOS -->
+  <section class="tab" id="t-gastos"></section>
+</main>
+
+<nav>
+  <button data-tab="resumen" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>Resumen</button>
+  <button data-tab="recibos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h6"/></svg>Recibos</button>
+  <button data-tab="deudas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Deudas</button>
+  <button data-tab="gastos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18l-2 13H5z"/><path d="M8 6a4 4 0 0 1 8 0"/></svg>Gastos</button>
+</nav>
+
+<dialog id="dlg"><div class="in" id="dlg-in"></div></dialog>
+<div class="toast" id="toast"></div>
+
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
