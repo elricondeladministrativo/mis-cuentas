@@ -14,9 +14,12 @@ function cargar() {
   return base();
 }
 function base() {
-  return { recibos: [], deudas: [], prestamos: [], gastos: {}, fijos:["Luz", "Gas", "Teléfono / wifi", "Netflix", "IA"] };
+  return { recibos: [], deudas: [], prestamos: [], gastos: {}, adicionales: {}, fijos:["Luz", "Gas", "Teléfono / wifi", "Netflix", "IA"] };
 }
 let db = cargar();
+// Deudas viejas: si estaban atadas a un descuento del recibo, "recibo"; si no, se pagaban con el sueldo.
+const migrar = () => db.deudas.forEach(d => { if (!d.paga) d.paga = d.concepto ? "recibo" : "sueldo"; });
+migrar();
 function guardar() {
   try { localStorage.setItem(CLAVE, JSON.stringify(db)); }
   catch (e) { aviso("No se pudo guardar: " + e.message); }
@@ -78,11 +81,14 @@ function render() {
   if (tab === "deudas") renderDeudas();
   if (tab === "gastos") renderGastos();
   if (tab === "prestamos") renderPrestamos();
+  if (tab === "adicional") renderAdicional();
 }
 
 // ---------- cálculos ----------
 const reciboDe = p => db.recibos.find(r => r.periodo === p);
 const gastosDe = p => db.gastos[p] || [];
+const adicionalesDe = p => db.adicionales[p] || [];
+const COMO_PAGA = { recibo: "Te la descuentan del recibo", sueldo: "La pagás con el sueldo", adicional: "La pagás con el adicional" };
 const restantes = d => Math.max(0, (+d.cuotas || 0) - (+d.pagadas || 0));
 const activa = d => restantes(d) > 0;
 function finDeuda(d) {
@@ -95,16 +101,24 @@ function finDeuda(d) {
 function renderResumen() {
   const p = inMes.value, r = reciboDe(p), rAnt = reciboDe(mesAnterior(p));
   const gastos = suma(gastosDe(p));
-  const aparte = db.deudas.filter(d => activa(d) && !d.concepto);
-  const cuotasAparte = suma(aparte.map(d => ({ monto: d.cuota })));
+  const adicional = suma(adicionalesDe(p));
+  const conSueldo = db.deudas.filter(d => activa(d) && d.paga === "sueldo");
+  const conAdic = db.deudas.filter(d => activa(d) && d.paga === "adicional");
+  const cuotasSueldo = suma(conSueldo.map(d => ({ monto: d.cuota })));
+  const cuotasAdic = suma(conAdic.map(d => ({ monto: d.cuota })));
   const neto = r ? r.neto : 0;
-  const queda = neto - gastos - cuotasAparte;
+  const quedaSueldo = neto - gastos - cuotasSueldo;
+  const quedaAdic = adicional - cuotasAdic;
+  const queda = quedaSueldo + quedaAdic;
   const deudaTotal = suma(db.deudas.filter(activa).map(d => ({ monto: d.cuota * restantes(d) })));
+  const colorN = n => n < 0 ? "bad" : "";
 
   let h = `<div class="card"><h2>Te queda en ${esc(nombreMes(p))}</h2>`;
-  if (r) {
+  if (r || adicional) {
     h += `<div class="big ${queda < 0 ? "bad" : "good"}">${plata(queda)}</div>
-      <div class="muted">Cobrás ${plata(neto)} y se van ${plata(gastos + cuotasAparte)} en gastos y cuotas.</div>`;
+      <div class="row" style="margin-top:6px"><span>Del sueldo<br><span class="muted">${r ? plata(neto) : "sin recibo"} − gastos ${plata(gastos)} − cuotas ${plata(cuotasSueldo)}</span></span><span class="n ${colorN(quedaSueldo)}">${plata(quedaSueldo)}</span></div>
+      <div class="row"><span>Del adicional<br><span class="muted">${plata(adicional)} − cuotas ${plata(cuotasAdic)}</span></span><span class="n ${colorN(quedaAdic)}">${plata(quedaAdic)}</span></div>`;
+    if (!r) h += `<div class="muted" style="margin-top:6px">Todavía no cargaste el recibo de este mes.</div>`;
   } else {
     h += `<div class="big">—</div><div class="muted">Todavía no cargaste el recibo de este mes.</div>
       <div class="acciones" style="margin-top:10px"><button onclick="irA('recibos')">Cargar recibo</button></div>`;
@@ -114,11 +128,13 @@ function renderResumen() {
   h += `<div class="grid2">
     <div class="card"><h2>Sueldo neto</h2><div class="mid">${r ? plata(neto) : "—"}</div>
       ${r && rAnt ? difHTML(neto - rAnt.neto, "vs. mes anterior") : ""}</div>
+    <div class="card"><h2>Adicional</h2><div class="mid">${plata(adicional)}</div>
+      <div class="muted">${adicionalesDe(p).length} cargados</div></div>
     <div class="card"><h2>Gastos</h2><div class="mid">${plata(gastos)}</div>
       <div class="muted">${gastosDe(p).length} cargados</div></div>
-    <div class="card"><h2>Cuotas aparte</h2><div class="mid">${plata(cuotasAparte)}</div>
-      <div class="muted">${aparte.length} que no salen del sueldo</div></div>
-    <div class="card"><h2>Deuda total</h2><div class="mid">${plata(deudaTotal)}</div>
+    <div class="card"><h2>Cuotas aparte</h2><div class="mid">${plata(cuotasSueldo + cuotasAdic)}</div>
+      <div class="muted">${conSueldo.length} con sueldo · ${conAdic.length} con adicional</div></div>
+    <div class="card" style="grid-column:1/-1"><h2>Deuda total</h2><div class="mid">${plata(deudaTotal)}</div>
       <div class="muted">${db.deudas.filter(activa).length} deudas activas</div></div>
   </div><div style="height:12px"></div>`;
 
@@ -164,7 +180,7 @@ window.importar = async input => {
     const d = JSON.parse(await f.text());
     if (!d.recibos || !d.deudas) throw new Error("no es una copia de Mis Cuentas");
     if (!confirm("Esto reemplaza todos los datos actuales por los de la copia. ¿Seguir?")) return;
-    db = Object.assign(base(), d); guardar(); render(); aviso("Copia restaurada");
+    db = Object.assign(base(), d); migrar(); guardar(); render(); aviso("Copia restaurada");
   } catch (e) { alert("No se pudo leer el archivo: " + e.message); }
 };
 
@@ -345,7 +361,7 @@ window.guardarRevision = () => {
   // Las deudas que se descuentan del sueldo suman una cuota pagada (una vez por mes).
   const marcadas = [];
   for (const d of db.deudas) {
-    if (!d.concepto) continue;
+    if (d.paga !== "recibo" || !d.concepto) continue;
     const linea = rev.descuentos.find(x => P.normalizar(x.concepto) === P.normalizar(d.concepto));
     d.pagos = d.pagos || [];
     if (linea && !d.pagos.includes(rev.periodo) && activa(d)) {
@@ -371,21 +387,21 @@ function renderDeudas() {
       const pct = d.cuotas ? Math.min(100, d.pagadas / d.cuotas * 100) : 0;
       return `<div class="card" style="${activa(d) ? "" : "opacity:.6"}">
         <div class="row" style="border:0;padding:0"><b>${esc(d.nombre)}</b><span class="n">${plata(d.cuota)}/mes</span></div>
-        <div class="muted">${d.concepto ? "Sale del sueldo: " + esc(d.concepto) : "La pagás aparte"}</div>
+        <div class="muted">${esc(COMO_PAGA[d.paga] || "")}${d.paga === "recibo" ? ": " + esc(d.concepto) : ""}</div>
         <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
         <div class="row" style="border:0"><span class="muted">${d.pagadas || 0} de ${d.cuotas} cuotas pagadas</span>
           <span class="muted">${activa(d) ? "termina " + esc(nombreMes(finDeuda(d))) : "<span class='good'>✓ terminada</span>"}</span></div>
         ${activa(d) ? `<div class="row"><span>Falta pagar (${restantes(d)} cuotas)</span><span class="n">${plata(d.cuota * restantes(d))}</span></div>` : ""}
         ${d.nota ? `<div class="muted">${esc(d.nota)}</div>` : ""}
         <div class="acciones" style="margin:8px 0 0">
-          ${activa(d) && !d.concepto ? `<button class="sec" onclick="pagarCuota('${d.id}')">✓ Pagué una cuota</button>` : ""}
+          ${activa(d) && d.paga !== "recibo" ? `<button class="sec" onclick="pagarCuota('${d.id}')">✓ Pagué una cuota</button>` : ""}
           <button class="sec" onclick="editarDeuda('${d.id}')">Editar</button></div></div>`;
     }).join("");
 }
 window.pagarCuota = i => { const d = db.deudas.find(x => x.id === i); d.pagadas = Math.min(d.cuotas, (+d.pagadas || 0) + 1); guardar(); render(); aviso("Cuota " + d.pagadas + " de " + d.cuotas); };
 $("#nueva-deuda").onclick = () => editarDeuda(null);
 window.editarDeuda = i => {
-  const d = i ? db.deudas.find(x => x.id === i) : { id: id(), nombre: "", cuota: 0, cuotas: 12, pagadas: 0, inicio: "", concepto: "", nota: "", pagos: [] };
+  const d = i ? db.deudas.find(x => x.id === i) : { id: id(), nombre: "", cuota: 0, cuotas: 12, pagadas: 0, inicio: "", paga: "sueldo", concepto: "", nota: "", pagos: [] };
   const ultimo = [...db.recibos].sort((a, b) => b.periodo.localeCompare(a.periodo))[0];
   const conceptos = ultimo ? ultimo.descuentos.map(x => x.concepto) : [];
   if (d.concepto && !conceptos.includes(d.concepto)) conceptos.push(d.concepto);
@@ -395,10 +411,13 @@ window.editarDeuda = i => {
     <div><label class="f">Primera cuota (mes)</label><input id="d-inicio" type="month" value="${esc(d.inicio)}"></div>
     <div><label class="f">Cantidad de cuotas</label><input id="d-cuotas" type="number" min="1" value="${d.cuotas}"></div>
     <div><label class="f">Cuotas ya pagadas</label><input id="d-pagadas" type="number" min="0" value="${d.pagadas || 0}"></div></div>
-    <label class="f">¿Se descuenta del recibo de sueldo?</label>
-    <select id="d-concepto"><option value="">No, la pago aparte</option>
-      ${conceptos.map(c => `<option ${c === d.concepto ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
-    ${conceptos.length ? "" : `<div class="muted">Cuando cargues un recibo vas a poder elegir el descuento que corresponde.</div>`}
+    <label class="f">¿Con qué la pagás?</label>
+    <select id="d-paga">
+      <option value="sueldo" ${d.paga === "sueldo" ? "selected" : ""}>Con el sueldo</option>
+      <option value="adicional" ${d.paga === "adicional" ? "selected" : ""}>Con el adicional</option>
+      ${conceptos.length ? `<optgroup label="Me la descuentan del recibo">${conceptos.map((c, n) => `<option value="r${n}" ${d.paga === "recibo" && c === d.concepto ? "selected" : ""}>${esc(c)}</option>`).join("")}</optgroup>` : ""}
+    </select>
+    <div class="muted" style="margin-top:4px">Si te la descuentan del recibo, ya viene restada en el sueldo neto y suma la cuota sola cada mes.</div>
     <label class="f">Nota</label><input id="d-nota" value="${esc(d.nota)}" placeholder="Ej: ver si conviene pagar todo junto">
     <div class="acciones" style="margin-top:14px"><button id="d-ok">Guardar</button><button class="sec" onclick="cerrar()">Cancelar</button></div>
     ${i ? `<button class="danger" id="d-borrar">Borrar deuda</button>` : ""}`;
@@ -408,12 +427,43 @@ window.editarDeuda = i => {
     d.cuota = leerMonto($("#d-cuota").value);
     d.cuotas = Math.max(1, parseInt($("#d-cuotas").value) || 1);
     d.pagadas = Math.min(d.cuotas, Math.max(0, parseInt($("#d-pagadas").value) || 0));
-    d.inicio = $("#d-inicio").value; d.concepto = $("#d-concepto").value; d.nota = $("#d-nota").value.trim();
+    const v = $("#d-paga").value;
+    if (v[0] === "r") { d.paga = "recibo"; d.concepto = conceptos[+v.slice(1)]; } else { d.paga = v; d.concepto = ""; }
+    d.inicio = $("#d-inicio").value; d.nota = $("#d-nota").value.trim();
     if (!i) db.deudas.push(d);
     guardar(); cerrar(); render();
   };
   if (i) $("#d-borrar").onclick = () => { if (confirm("¿Borrar " + d.nombre + "?")) { db.deudas = db.deudas.filter(x => x.id !== i); guardar(); cerrar(); render(); } };
 };
+
+// ---------- ADICIONAL (plata extra que entra en el mes) ----------
+function renderAdicional() {
+  const p = inMes.value, lista = adicionalesDe(p);
+  const conAdic = db.deudas.filter(d => activa(d) && d.paga === "adicional");
+  const total = suma(lista), cuotas = suma(conAdic.map(d => ({ monto: d.cuota })));
+  let h = `<div class="card"><h2>Adicional de ${esc(nombreMes(p))}</h2><div class="big">${plata(total)}</div>
+    <div class="muted">${lista.length ? lista.length + " ingreso" + (lista.length > 1 ? "s" : "") : "Todavía no cargaste nada este mes"}</div></div>
+    <div class="card"><h2>Lo que entró</h2>`;
+  h += lista.length ? lista.map(a => `<div class="row"><span>${esc(a.concepto)}</span><span><span class="n">${plata(a.monto)}</span>
+      <button class="danger" onclick="borrarAdicional('${a.id}')">✕</button></span></div>`).join("") : `<div class="muted">Nada cargado.</div>`;
+  h += `<div class="edit" style="grid-template-columns:1fr 120px;margin-top:12px"><input id="a-concepto" placeholder="De dónde (ej: horas extra)">
+      <input id="a-monto" class="num" inputmode="decimal" placeholder="0,00"></div>
+    <button onclick="agregarAdicional()" style="width:100%">Agregar adicional</button></div>`;
+  if (conAdic.length) {
+    h += `<div class="card"><h2>Cuotas que pagás con el adicional</h2>`;
+    h += conAdic.map(d => `<div class="row"><span>${esc(d.nombre)}<br><span class="muted">cuota ${(+d.pagadas || 0) + 1} de ${d.cuotas}</span></span><span class="n">${plata(d.cuota)}</span></div>`).join("");
+    const queda = total - cuotas;
+    h += `<div class="row"><b>Te queda del adicional</b><span class="n ${queda < 0 ? "bad" : "good"}">${plata(queda)}</span></div></div>`;
+  }
+  $("#t-adicional").innerHTML = h;
+}
+window.agregarAdicional = () => {
+  const concepto = $("#a-concepto").value.trim() || "Adicional", m = leerMonto($("#a-monto").value);
+  if (!m) return aviso("Poné el monto");
+  const p = inMes.value; (db.adicionales[p] = db.adicionales[p] || []).push({ id: id(), concepto, monto: m });
+  guardar(); render(); aviso("Adicional agregado");
+};
+window.borrarAdicional = i => { const p = inMes.value; db.adicionales[p] = adicionalesDe(p).filter(a => a.id !== i); guardar(); render(); };
 
 // ---------- PRÉSTAMOS (mutuales) ----------
 // Las cuotas se cuentan solas por mes desde la primera cuota hasta el mes elegido arriba.

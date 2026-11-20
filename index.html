@@ -57,7 +57,7 @@ label.f { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4
 .bar > i { display: block; height: 100%; background: var(--brand); }
 .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--ink); margin-left: 6px; vertical-align: middle; }
 nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
-nav button { flex: 1; background: none; color: var(--muted); border-radius: 0; padding: 10px 4px 12px; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 600; }
+nav button { flex: 1; min-width: 0; background: none; color: var(--muted); border-radius: 0; padding: 10px 2px 12px; flex-direction: column; gap: 2px; font-size: 11px; font-weight: 600; letter-spacing: -.01em; }
 nav button svg { width: 22px; height: 22px; }
 nav button.on { color: var(--brand); }
 dialog { border: 0; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 40px); background: var(--card); color: var(--ink); }
@@ -108,11 +108,15 @@ details summary::-webkit-details-marker { display: none; }
 
   <!-- GASTOS -->
   <section class="tab" id="t-gastos"></section>
+
+  <!-- ADICIONAL -->
+  <section class="tab" id="t-adicional"></section>
 </main>
 
 <nav>
   <button data-tab="resumen" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>Resumen</button>
   <button data-tab="recibos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h6"/></svg>Recibos</button>
+  <button data-tab="adicional"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Adicional</button>
   <button data-tab="deudas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Deudas</button>
   <button data-tab="prestamos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10l9-6 9 6M5 10v9M19 10v9M9 10v9M15 10v9M3 21h18"/></svg>Préstamos</button>
   <button data-tab="gastos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18l-2 13H5z"/><path d="M8 6a4 4 0 0 1 8 0"/></svg>Gastos</button>
