@@ -72,7 +72,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   render(); scrollTo(0, 0);
 });
 const inMes = $("#mes");
-inMes.value = db.recibos.length ? [...db.recibos].sort((a, b) => b.periodo.localeCompare(a.periodo))[0].periodo : mesHoy();
+inMes.value = db.recibos.length ? sumarMeses([...db.recibos].sort((a, b) => b.periodo.localeCompare(a.periodo))[0].periodo, 1) : mesHoy();
 inMes.onchange = () => { if (!inMes.value) inMes.value = mesHoy(); render(); };
 
 function render() {
@@ -86,6 +86,8 @@ function render() {
 
 // ---------- cálculos ----------
 const reciboDe = p => db.recibos.find(r => r.periodo === p);
+// El recibo de un mes se cobra el mes siguiente (el de octubre se cobra en noviembre).
+const reciboCobradoEn = m => reciboDe(mesAnterior(m));
 const gastosDe = p => db.gastos[p] || [];
 const adicionalesDe = p => db.adicionales[p] || [];
 const COMO_PAGA = { recibo: "Te la descuentan del recibo", sueldo: "La pagás con el sueldo", adicional: "La pagás con el adicional" };
@@ -99,7 +101,7 @@ function finDeuda(d) {
 
 // ---------- RESUMEN ----------
 function renderResumen() {
-  const p = inMes.value, r = reciboDe(p), rAnt = reciboDe(mesAnterior(p));
+  const p = inMes.value, r = reciboCobradoEn(p), rAnt = reciboCobradoEn(mesAnterior(p)), mesRecibo = nombreMes(mesAnterior(p));
   const gastos = suma(gastosDe(p));
   const adicional = suma(adicionalesDe(p));
   const conSueldo = db.deudas.filter(d => activa(d) && d.paga === "sueldo");
@@ -116,17 +118,17 @@ function renderResumen() {
   let h = `<div class="card"><h2>Te queda en ${esc(nombreMes(p))}</h2>`;
   if (r || adicional) {
     h += `<div class="big ${queda < 0 ? "bad" : "good"}">${plata(queda)}</div>
-      <div class="row" style="margin-top:6px"><span>Del sueldo<br><span class="muted">${r ? plata(neto) : "sin recibo"} − gastos ${plata(gastos)} − cuotas ${plata(cuotasSueldo)}</span></span><span class="n ${colorN(quedaSueldo)}">${plata(quedaSueldo)}</span></div>
+      <div class="row" style="margin-top:6px"><span>Del sueldo (recibo de ${esc(mesRecibo.split(" ")[0])})<br><span class="muted">${r ? plata(neto) : "sin recibo"} − gastos ${plata(gastos)} − cuotas ${plata(cuotasSueldo)}</span></span><span class="n ${colorN(quedaSueldo)}">${plata(quedaSueldo)}</span></div>
       <div class="row"><span>Del adicional<br><span class="muted">${plata(adicional)} − cuotas ${plata(cuotasAdic)}</span></span><span class="n ${colorN(quedaAdic)}">${plata(quedaAdic)}</span></div>`;
-    if (!r) h += `<div class="muted" style="margin-top:6px">Todavía no cargaste el recibo de este mes.</div>`;
+    if (!r) h += `<div class="muted" style="margin-top:6px">Todavía no cargaste el recibo de ${esc(mesRecibo)}, que es el que cobrás en ${esc(nombreMes(p))}.</div>`;
   } else {
-    h += `<div class="big">—</div><div class="muted">Todavía no cargaste el recibo de este mes.</div>
+    h += `<div class="big">—</div><div class="muted">Todavía no cargaste el recibo de ${esc(mesRecibo)}, que es el que cobrás en ${esc(nombreMes(p))}.</div>
       <div class="acciones" style="margin-top:10px"><button onclick="irA('recibos')">Cargar recibo</button></div>`;
   }
   h += `</div>`;
 
   h += `<div class="grid2">
-    <div class="card"><h2>Sueldo neto</h2><div class="mid">${r ? plata(neto) : "—"}</div>
+    <div class="card"><h2>Sueldo neto</h2><div class="mid">${r ? plata(neto) : "—"}</div><div class="muted">recibo de ${esc(mesRecibo)}</div>
       ${r && rAnt ? difHTML(neto - rAnt.neto, "vs. mes anterior") : ""}</div>
     <div class="card"><h2>Adicional</h2><div class="mid">${plata(adicional)}</div>
       <div class="muted">${adicionalesDe(p).length} cargados</div></div>
@@ -140,7 +142,7 @@ function renderResumen() {
 
   if (r && r.descuentos.length) {
     const bruto = suma(r.haberes);
-    h += `<div class="card"><h2>Qué te descuentan del sueldo</h2>`;
+    h += `<div class="card"><h2>Qué te descuentan del sueldo (recibo de ${esc(mesRecibo)})</h2>`;
     for (const d of [...r.descuentos].sort((a, b) => b.monto - a.monto)) {
       const pct = bruto ? d.monto / bruto * 100 : 0;
       h += `<div style="margin:8px 0"><div class="row" style="border:0;padding:0"><span>${esc(d.concepto)}</span><span class="n">${plata(d.monto)}</span></div>
@@ -204,7 +206,7 @@ function renderRecibos() {
       return `<div class="row"><span>${esc(x.concepto)}${dif}</span><span class="n">${plata(x.monto)}</span></div>`;
     };
     return `<details class="card"><summary><div class="row" style="border:0;padding:0">
-        <span><b style="text-transform:capitalize">${esc(nombreMes(r.periodo))}</b><span class="chip">${r.fuente === "foto" ? "foto" : "PDF"}</span>
+        <span><b style="text-transform:capitalize">${esc(nombreMes(r.periodo))}</b><span class="chip">${r.fuente === "foto" ? "foto" : "PDF"}</span><div class="muted">se cobra en ${esc(nombreMes(sumarMeses(r.periodo, 1)))}</div>
         ${ant ? difHTML(r.neto - ant.neto, "vs. mes anterior") : ""}</span>
         <span class="n">${plata(r.neto)}</span></div></summary>
       <h2 style="margin-top:14px">Haberes</h2>${r.haberes.map(fila).join("")}
@@ -311,7 +313,7 @@ function cerrar() { if (dlg.open) dlg.close(); }
 let rev = null, revOriginal = null;
 function abrirRevision(r, original) {
   rev = r; revOriginal = original || null;
-  if (!rev.periodo) rev.periodo = inMes.value;
+  if (!rev.periodo) rev.periodo = mesAnterior(inMes.value);
   pintarRevision();
   if (!dlg.open) dlg.showModal();
 }
@@ -324,7 +326,8 @@ function pintarRevision() {
   const hayAnterior = revOriginal || reciboDe(rev.periodo);
   $("#dlg-in").innerHTML = `<h3>Revisá los datos</h3>
     <div class="muted">${rev.fuente === "foto" ? "Leído de una foto: revisá bien los números." : "Leído del PDF."} Corregí lo que haga falta y guardá.</div>
-    <label class="f">Mes del recibo</label><input type="month" value="${esc(rev.periodo)}" onchange="rev.periodo=this.value">
+    <label class="f">Mes del recibo (el que dice "Per. de Pago")</label><input type="month" value="${esc(rev.periodo)}" onchange="rev.periodo=this.value;pintarRevision()">
+    <div class="muted" style="margin-top:4px">Lo cobrás en ${esc(nombreMes(sumarMeses(rev.periodo, 1)))}: en ese mes se suma al resumen.</div>
     <h2 style="margin:16px 0 8px;font-size:14px;color:var(--muted)">HABERES</h2>${filas(rev.haberes, "haberes")}
     <button class="link" onclick="rev.haberes.push({concepto:'',monto:0});pintarRevision()">＋ agregar haber</button>
     <h2 style="margin:16px 0 8px;font-size:14px;color:var(--muted)">DESCUENTOS</h2>${filas(rev.descuentos, "descuentos")}
@@ -369,7 +372,7 @@ window.guardarRevision = () => {
     }
   }
   guardar(); cerrar();
-  inMes.value = rev.periodo;
+  inMes.value = sumarMeses(rev.periodo, 1);
   render();
   aviso("Recibo guardado" + (marcadas.length ? " · cuota sumada en: " + marcadas.join(", ") : ""));
 };

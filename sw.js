@@ -1,6 +1,6 @@
 // Guarda la app en el teléfono para que funcione sin internet.
 // También guarda los lectores de PDF y de fotos la primera vez que se usan.
-const VERSION = "mis-cuentas-v4";
+const VERSION = "mis-cuentas-v5";
 const FILES = ["./", "./index.html", "./app.js", "./parser.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
