@@ -14,7 +14,7 @@ function cargar() {
   return base();
 }
 function base() {
-  return { recibos: [], deudas: [], gastos: {}, fijos: ["Luz", "Gas", "Teléfono / wifi", "Netflix", "IA"] };
+  return { recibos: [], deudas: [], prestamos: [], gastos: {}, fijos:["Luz", "Gas", "Teléfono / wifi", "Netflix", "IA"] };
 }
 let db = cargar();
 function guardar() {
@@ -77,6 +77,7 @@ function render() {
   if (tab === "recibos") renderRecibos();
   if (tab === "deudas") renderDeudas();
   if (tab === "gastos") renderGastos();
+  if (tab === "prestamos") renderPrestamos();
 }
 
 // ---------- cálculos ----------
@@ -412,6 +413,81 @@ window.editarDeuda = i => {
     guardar(); cerrar(); render();
   };
   if (i) $("#d-borrar").onclick = () => { if (confirm("¿Borrar " + d.nombre + "?")) { db.deudas = db.deudas.filter(x => x.id !== i); guardar(); cerrar(); render(); } };
+};
+
+// ---------- PRÉSTAMOS (mutuales) ----------
+// Las cuotas se cuentan solas por mes desde la primera cuota hasta el mes elegido arriba.
+const mesesEntre = (a, b) => { const [ya, ma] = a.split("-").map(Number), [yb, mb] = b.split("-").map(Number); return (yb * 12 + mb) - (ya * 12 + ma); };
+const pagadasEn = (p, m) => !p.inicio || p.inicio > m ? 0 : Math.min(p.cuotas, mesesEntre(p.inicio, m) + 1);
+const ultimaCuota = p => sumarMeses(p.inicio, p.cuotas - 1);
+
+function renderPrestamos() {
+  const m = inMes.value, ps = db.prestamos;
+  if (!ps.length) {
+    $("#lista-prestamos").innerHTML = `<div class="card vacio">Cargá los préstamos de las mutuales: cuánto es la cuota, cuántas cuotas son y cuándo es la primera.<br><br>La app cuenta sola cuántas vas pagando cada mes y cuántas te faltan.</div>`;
+    return;
+  }
+  const estado = p => pagadasEn(p, m) >= p.cuotas ? 2 : p.inicio > m ? 1 : 0; // 0 en curso, 1 por empezar, 2 terminado
+  const lista = [...ps].sort((a, b) => estado(a) - estado(b) || (a.cuotas - pagadasEn(a, m)) - (b.cuotas - pagadasEn(b, m)));
+  const enCurso = ps.filter(p => estado(p) === 0);
+  const falta = suma(ps.map(p => ({ monto: p.cuota * (p.cuotas - pagadasEn(p, m)) })));
+  let h = `<div class="card"><h2>Préstamos a ${esc(nombreMes(m))}</h2>
+    <div class="big">${plata(falta)}</div><div class="muted">en total te falta pagar</div>
+    <div class="row" style="margin-top:8px"><span>Cuotas de este mes (${enCurso.length})</span><span class="n">${plata(suma(enCurso.map(p => ({ monto: p.cuota }))))}</span></div>
+    <div class="muted" style="margin-top:6px">Cambiá el mes de arriba para ver cómo vas a estar más adelante.</div></div>`;
+  for (const p of lista) {
+    const pag = pagadasEn(p, m), faltan = p.cuotas - pag, e = estado(p);
+    h += `<div class="card" style="${e === 2 ? "opacity:.6" : ""}">
+      <div class="row" style="border:0;padding:0"><b>${esc(p.nombre)}</b><span class="n">${plata(p.cuota)}/mes</span></div>
+      ${e === 1 ? `<div class="mid warn" style="margin-top:6px">Empieza en ${esc(nombreMes(p.inicio))}</div>
+          <div class="muted">${p.cuotas} cuotas · la última en ${esc(nombreMes(ultimaCuota(p)))}</div>`
+        : e === 2 ? `<div class="mid good" style="margin-top:6px">✓ Terminado</div><div class="muted">Pagaste las ${p.cuotas} cuotas (la última en ${esc(nombreMes(ultimaCuota(p)))})</div>`
+        : `<div class="mid" style="margin-top:6px">Vas ${pag} de ${p.cuotas} cuotas</div>
+          <div class="bar"><i style="width:${(pag / p.cuotas * 100).toFixed(1)}%"></i></div>
+          <div class="muted" style="margin-top:4px">Faltan ${faltan} · la última es en ${esc(nombreMes(ultimaCuota(p)))}</div>`}
+      ${e !== 2 ? `<div class="row"><span>Falta pagar</span><span class="n">${plata(p.cuota * faltan)}</span></div>` : ""}
+      <div class="acciones" style="margin:8px 0 0"><button class="sec" onclick="editarPrestamo('${p.id}')">Editar</button></div></div>`;
+  }
+  $("#lista-prestamos").innerHTML = h;
+}
+$("#nuevo-prestamo").onclick = () => editarPrestamo(null);
+window.editarPrestamo = i => {
+  const m = inMes.value;
+  const p = i ? db.prestamos.find(x => x.id === i) : { id: id(), nombre: "", cuota: 0, cuotas: 12, inicio: "" };
+  $("#dlg-in").innerHTML = `<h3>${i ? "Editar préstamo" : "Nuevo préstamo"}</h3>
+    <label class="f">Mutual / préstamo</label><input id="p-nombre" value="${esc(p.nombre)}" placeholder="Ej: Mutual Hospital">
+    <div class="grid2"><div><label class="f">Monto de la cuota</label><input id="p-cuota" class="num" inputmode="decimal" value="${numStr(p.cuota)}"></div>
+    <div><label class="f">Cantidad de cuotas</label><input id="p-cuotas" type="number" min="1" value="${p.cuotas}"></div></div>
+    <label class="f">Primera cuota (mes)</label><input id="p-inicio" type="month" value="${esc(p.inicio)}">
+    <label class="f">…o si no te acordás: ¿cuántas cuotas pagaste hasta ${esc(nombreMes(m))} inclusive?</label>
+    <input id="p-pagadas" type="number" min="0" value="${p.inicio ? pagadasEn(p, m) : ""}" placeholder="Ej: 5">
+    <div class="muted" id="p-info" style="margin-top:8px"></div>
+    <div class="acciones" style="margin-top:14px"><button id="p-ok">Guardar</button><button class="sec" onclick="cerrar()">Cancelar</button></div>
+    ${i ? `<button class="danger" id="p-borrar">Borrar préstamo</button>` : ""}`;
+  dlg.showModal();
+  const info = () => {
+    const t = { inicio: $("#p-inicio").value, cuotas: Math.max(1, parseInt($("#p-cuotas").value) || 1) };
+    $("#p-info").textContent = t.inicio ? (t.inicio > m ? "Empieza en " + nombreMes(t.inicio) + "." : "Vas " + pagadasEn(t, m) + " de " + t.cuotas + ".") + " Última cuota: " + nombreMes(ultimaCuota(t)) + "." : "";
+  };
+  // Si pone cuántas pagó, calculo el mes de la primera cuota (y al revés).
+  $("#p-pagadas").oninput = () => {
+    const n = parseInt($("#p-pagadas").value);
+    if (n >= 0) $("#p-inicio").value = sumarMeses(m, 1 - n);
+    info();
+  };
+  $("#p-inicio").oninput = () => { const t = { inicio: $("#p-inicio").value, cuotas: parseInt($("#p-cuotas").value) || 1 }; $("#p-pagadas").value = t.inicio ? pagadasEn(t, m) : ""; info(); };
+  $("#p-cuotas").oninput = info;
+  info();
+  $("#p-ok").onclick = () => {
+    if (!$("#p-inicio").value) return alert("Poné el mes de la primera cuota o cuántas pagaste.");
+    p.nombre = $("#p-nombre").value.trim() || "Préstamo";
+    p.cuota = leerMonto($("#p-cuota").value);
+    p.cuotas = Math.max(1, parseInt($("#p-cuotas").value) || 1);
+    p.inicio = $("#p-inicio").value;
+    if (!i) db.prestamos.push(p);
+    guardar(); cerrar(); render();
+  };
+  if (i) $("#p-borrar").onclick = () => { if (confirm("¿Borrar " + p.nombre + "?")) { db.prestamos = db.prestamos.filter(x => x.id !== i); guardar(); cerrar(); render(); } };
 };
 
 // ---------- GASTOS ----------
